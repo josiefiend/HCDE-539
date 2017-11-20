@@ -107,7 +107,7 @@ void wakeJellyfishLED() {
 // TO DO: update this to set a default wake color transition (e.g. bright green, then fade to aqua)
 // currently cycles through red, green, blue, then purple, flashes three times, back to purple
 void wakeJellyfishRGB() {
-  analogWrite(redPin, 0);
+  analogWrite(redPin, 0); // anode LED, so 0 is max and 255 is min
   analogWrite(greenPin, 255);
   analogWrite(bluePin, 255);
   delay(500);
@@ -159,7 +159,7 @@ void wakeJellyfishRGB() {
 
 // turns off RGB
 void sleepJellyfishRGB() {
-  analogWrite(redPin, 255);
+  analogWrite(redPin, 255);  // anode LED, so 0 is max and 255 is min
   analogWrite(greenPin, 255);
   analogWrite(bluePin, 255);
 }
