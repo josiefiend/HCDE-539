@@ -14,9 +14,9 @@ const int photoSensorPin = A0; // connect sensor to analog pin
 const int redLED = 6;
 const int greenLED = 5;
 const int blueLED = 4;
-const int redPin = 9;
+const int redPin = 11;
 const int greenPin = 10;
-const int bluePin = 11;
+const int bluePin = 9;
 
 Servo jellyMover; // servo to control jellyfish
 Adafruit_LiquidCrystal lcd(0); // initialize LCD
@@ -107,17 +107,17 @@ void wakeJellyfishLED() {
 // TO DO: update this to set a default wake color transition (e.g. bright green, then fade to aqua)
 // currently cycles through red, green, blue, then purple, flashes three times, back to purple
 void wakeJellyfishRGB() {
-  analogWrite(redPin, 255);
-  analogWrite(greenPin, 0);
-  analogWrite(bluePin, 0);
-  delay(500);
   analogWrite(redPin, 0);
   analogWrite(greenPin, 255);
-  analogWrite(bluePin, 0);
+  analogWrite(bluePin, 255);
   delay(500);
-  analogWrite(redPin, 0);
+  analogWrite(redPin, 255);
   analogWrite(greenPin, 0);
   analogWrite(bluePin, 255);
+  delay(500);
+  analogWrite(redPin, 255);
+  analogWrite(greenPin, 255);
+  analogWrite(bluePin, 0);
   delay(500);
   analogWrite(redPin, 175);
   analogWrite(greenPin, 255);
