@@ -34,7 +34,7 @@
 #include <pixelset.h>
 #include <pixeltypes.h>
 #include <platforms.h>
-#include <power_mgt.h>
+#include <power_mgt.h>1
 
 const String myNodeName = "Jellyfish"; // name node for use with AlertNodeLib
 const boolean SENDING = true; // settings for AlertLib
@@ -51,7 +51,7 @@ const int DATA_PIN = 5;
 const int CLK_PIN = 13;
 #define LED_TYPE APA102
 #define COLOR_ORDER BGR
-#define NUM_LEDS 15
+#define NUM_LEDS 20
 const int BRIGHTNESS = 96;
 const int FRAMES_PER_SECOND = 120;
 CRGB leds[NUM_LEDS];
@@ -63,7 +63,11 @@ AlertNode myNode; // connect to XBee; pin 2 TX and pin 3 for RX, 9600 baud
 int position; // servo position
 int predatorDetected = 0; // state of predators
 int photoSensorValue = 0; // amount of light
+
 // TODO: add state for LED, add timer
+
+unsigned long previousMillis = 0;
+unsigned long interval = 5000; // how long to run LED pattern for
 
 void setup() {
   delay(3000); // 3 second recommended delay for recovery for FastLED
@@ -73,11 +77,11 @@ void setup() {
   Serial.println(myNodeName);
   myNode.setDebug(true);
 
+  jellyMover.attach(4); // set jellyfish on pin 4
   pinMode(hallSensorPin, INPUT);  // set sensor pin as input
   //  pinMode(redPin, OUTPUT);
   //  pinMode(greenPin, OUTPUT);
   //  pinMode(bluePin, OUTPUT);
-  //jellyMover.attach(4); // set jellyfish on pin 4
   // start LED in off state - currently testing LED strip instead
   //analogWrite(greenPin, 255);
   //analogWrite(redPin, 255);
@@ -87,16 +91,20 @@ void setup() {
   FastLED.addLeds<LED_TYPE, DATA_PIN, CLK_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   // set brightness control
   FastLED.setBrightness(BRIGHTNESS);
+
   sleepJellyfish();
 }
 
-//uint8_t gCurrentPatternNumber = 0; // Index number of which pattern is current
-uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+uint8_t gHue = 0; // rotating "base color" used by many FastLED patterns
 
 void loop() {
   // put your main code here, to run repeatedly:
+  // insert a delay to keep the framerate modest
+  FastLED.delay(1000 / FRAMES_PER_SECOND);
   unsigned long currentMillis = millis(); // timer
-
+  //if ((unsigned long)(currentMillis - previousMillis) >= interval) {
+  //    Serial.println(currentMillis);
+  //  }
   //check alerts
   int alert = myNode.alertReceived();
   if (alert != AlertNode::NO_ALERT) {
@@ -105,21 +113,21 @@ void loop() {
     Serial.print(" ");
     Serial.println(myNode.alertName(alert));
     if (alert == AlertNode::EARTHQUAKE) {
-      // do earthquake thing
-  
+      //earthquake
+      FastLED.showColor(CRGB::Yellow);
+      delay(5000);
     }
     else if (alert == AlertNode::FLOOD) {
       // do flood thing - e.g. move a lot more
+      FastLED.showColor(CRGB::Green);
+      delay(5000);
     }
     else if (alert == AlertNode::OCEAN_ACIDIFICATION) {
       // do red thing
+      FastLED.showColor(CRGB::Red);
+      delay(5000);
     }
   }
-
-  // send the 'leds' array out to the actual LED strip
-  FastLED.show();
-  // insert a delay to keep the framerate modest
-  FastLED.delay(1000 / FRAMES_PER_SECOND);
 
   // jellyfish creates light when it's dark
   senseLight();
@@ -127,13 +135,13 @@ void loop() {
     wakeJellyfish();
   }
   else if (photoSensorValue > 200) {
-    sleepJellyfish(); //if photosensor value is low, turn off LEDs
+    sleepJellyfish(); //if it's bright, turn off LEDs
   }
 
   // read magnet sensor input (current prototype for predator nearby--may switch out with time of flight sensor)
   detectPredator();
   if (predatorDetected) {
-    swayJellyfish();
+    //swayJellyfish();
   }
 }
 
@@ -142,9 +150,9 @@ void loop() {
 
 void sinelon() {
   // a colored dot sweeping back and forth, with fading trails
-  fadeToBlackBy( leds, NUM_LEDS, 20);
+  fadeToBlackBy(leds, NUM_LEDS, 20);
   int pos = beatsin16( 13, 0, NUM_LEDS - 1 );
-  leds[pos] += CHSV( 192, 255, 255); // purple
+  leds[pos] += CHSV(160, 255, 255); // purple
 }
 
 void confetti() {
@@ -175,24 +183,6 @@ void juggle() {
 //  // bright chartruse/green
 //}
 
-//void colorFadeJellyfish() {
-//  int redValue = 0;
-//  int blueValue = 255;
-//  int greenValue = 255;
-//
-//  analogWrite(redPin, redValue);
-//  analogWrite(greenPin, greenValue);
-//  analogWrite(bluePin, blueValue);
-//  delay(1000);
-//  for (int i = 0; i < 255; i++) {
-//    greenValue -= 1;
-//    analogWrite(greenPin, greenValue);
-//    Serial.println(greenValue);
-//    delay(100);
-//  }
-//}
-
-
 //TO DO: convert this to flight time sensor input when part comes in
 void detectPredator() {
   int hallEffectSensorValue = digitalRead(hallSensorPin);
@@ -211,8 +201,6 @@ void senseLight() {
 void wakeJellyfish() {
   FastLED.showColor(CRGB::Aqua); // background color
   sinelon();
-  //confetti();
-  // juggle();
 }
 
 // turns off RGB
