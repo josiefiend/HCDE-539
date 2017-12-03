@@ -36,22 +36,20 @@
 #include <platforms.h>
 #include <power_mgt.h>1
 
-const String myNodeName = "Jellyfish"; // name node for use with AlertNodeLib
-const boolean SENDING = true; // settings for AlertLib
-const boolean RECEIVING = true; // setting for AlertLib
-boolean myDebugging = true; // settings for AlertLib
 //const int debugPin = LED_BUILTIN; // set built in LED for debugging - commented b/c I'm currently using pin 13 in my build
 const int hallSensorPin = 7; // magnet sensor is attached here
 const int photoSensorPin = A0; // connect sensor to analog pin
-//const int redPin = 11; - currently testing LED strip instead
-//const int greenPin = 10;
-//const int bluePin = 9;
+// settings for AlertLib
+const String myNodeName = "Jellyfish"; // name node for use with AlertNodeLib
+const boolean SENDING = true;
+const boolean RECEIVING = true;
+boolean myDebugging = true; // change this based on your preference
 // settings for FastLED with APA102 DotStar strip
-const int DATA_PIN = 5;
-const int CLK_PIN = 13;
+const int DATA_PIN = 5; // TODO: update for multiple strips
+const int CLK_PIN = 13; // TODO: update for multiple strips
 #define LED_TYPE APA102
 #define COLOR_ORDER BGR
-#define NUM_LEDS 20
+#define NUM_LEDS 100
 const int BRIGHTNESS = 96;
 const int FRAMES_PER_SECOND = 120;
 CRGB leds[NUM_LEDS];
@@ -61,13 +59,22 @@ Adafruit_LiquidCrystal lcd(0); // initialize LCD
 AlertNode myNode; // connect to XBee; pin 2 TX and pin 3 for RX, 9600 baud
 
 int position; // servo position
-int predatorDetected = 0; // state of predators
-int photoSensorValue = 0; // amount of light
+int predatorDetected; // state of predators
+int photoSensorValue; // amount of light
 
-// TODO: add state for LED, add timer
-
-unsigned long previousMillis = 0;
-unsigned long interval = 5000; // how long to run LED pattern for
+// alert timers & states
+unsigned long lastLoopStartTime = millis();
+unsigned long currentTime;
+long loopDelta;
+long earthquakeOnRemainingTime; // counter for alert
+long floodOnRemainingTime;
+long oceanAcidificationOnRemainingTime;
+long jellyWarningOnRemainingTime;
+bool earthquakeOn;
+bool floodOn;
+bool oceanAcidificationOn;
+bool jellyWarningOn;
+int currentAlert = AlertNode::NO_ALERT;
 
 void setup() {
   delay(3000); // 3 second recommended delay for recovery for FastLED
@@ -75,113 +82,208 @@ void setup() {
   myNode.begin(myNodeName); // start node
   Serial.print("\n\n*** Starting AlertNodeBasic demo: ");
   Serial.println(myNodeName);
-  myNode.setDebug(true);
+  //myNode.setDebug(true);
 
   jellyMover.attach(4); // set jellyfish on pin 4
   pinMode(hallSensorPin, INPUT);  // set sensor pin as input
-  //  pinMode(redPin, OUTPUT);
-  //  pinMode(greenPin, OUTPUT);
-  //  pinMode(bluePin, OUTPUT);
-  // start LED in off state - currently testing LED strip instead
-  //analogWrite(greenPin, 255);
-  //analogWrite(redPin, 255);
-  //analogWrite(bluePin, 255);
 
   // setup for FastLED
-  FastLED.addLeds<LED_TYPE, DATA_PIN, CLK_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.addLeds<LED_TYPE, DATA_PIN, CLK_PIN, COLOR_ORDER, DATA_RATE_MHZ(12)>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
   // set brightness control
   FastLED.setBrightness(BRIGHTNESS);
 
   sleepJellyfish();
 }
 
-uint8_t gHue = 0; // rotating "base color" used by many FastLED patterns
-
 void loop() {
   // put your main code here, to run repeatedly:
-  // insert a delay to keep the framerate modest
-  FastLED.delay(1000 / FRAMES_PER_SECOND);
-  unsigned long currentMillis = millis(); // timer
-  //if ((unsigned long)(currentMillis - previousMillis) >= interval) {
-  //    Serial.println(currentMillis);
-  //  }
-  //check alerts
-  int alert = myNode.alertReceived();
-  if (alert != AlertNode::NO_ALERT) {
-    Serial.println("*** Alert received: ");
-    Serial.print(alert);
-    Serial.print(" ");
-    Serial.println(myNode.alertName(alert));
-    if (alert == AlertNode::EARTHQUAKE) {
-      //earthquake
-      FastLED.showColor(CRGB::Yellow);
-      delay(5000);
-    }
-    else if (alert == AlertNode::FLOOD) {
-      // do flood thing - e.g. move a lot more
-      FastLED.showColor(CRGB::Green);
-      delay(5000);
-    }
-    else if (alert == AlertNode::OCEAN_ACIDIFICATION) {
-      // do red thing
-      FastLED.showColor(CRGB::Red);
-      delay(5000);
-    }
-  }
 
-  // jellyfish creates light when it's dark
-  senseLight();
-  if (photoSensorValue < 200) {
-    wakeJellyfish();
-  }
-  else if (photoSensorValue > 200) {
-    sleepJellyfish(); //if it's bright, turn off LEDs
+  FastLED.delay(1000 / FRAMES_PER_SECOND); // insert a delay for FastLED to keep the framerate modest
+  // timer
+  currentTime = millis();
+  loopDelta = currentTime - lastLoopStartTime;
+  lastLoopStartTime = currentTime;
+
+  //TO DO: REINTEGRATE THIS WITH NEW STRUCTURE
+  // 1. JELLYFISH CREATES LIGHT WHEN IT'S DARK
+  //      senseLight();
+  //      if (photoSensorValue > 200) {
+  //        wakeJellyfish();
+  //      }
+  //      else if (photoSensorValue > 200) {
+  //        sleepJellyfish(); //if it's bright, turn off LEDs
+  //      }
+
+  // 2. JELLYFISH RESPONDS TO ALERTS
+  currentAlert = TransitionAlertMode(currentAlert); // TransitionAlertMode sets states for each alert, returns current alert mode
+  // Transition between alerts,
+  switch (currentAlert)
+  {
+    case AlertNode::EARTHQUAKE:
+      currentAlert = earthquakeRender();
+      break;
+    case AlertNode::FLOOD:
+      currentAlert = floodRender();
+      break;
+    case AlertNode::OCEAN_ACIDIFICATION:
+      currentAlert = oceanAcidificationRender();
+      break;
+    case AlertNode::JELLY_WARNING:
+      currentAlert = jellyWarningRender();
+      break;
+    default: // jellyfish behavior when no alert is present
+      wakeJellyfish();
+      break;
   }
 
   // read magnet sensor input (current prototype for predator nearby--may switch out with time of flight sensor)
   detectPredator();
   if (predatorDetected) {
-    //swayJellyfish();
+    warnOtherJellyfish();
   }
 }
 
-// FastLED example pattern functions for testing
-#define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
+// FastLED  pattern function
 
 void sinelon() {
   // a colored dot sweeping back and forth, with fading trails
   fadeToBlackBy(leds, NUM_LEDS, 20);
   int pos = beatsin16( 13, 0, NUM_LEDS - 1 );
-  leds[pos] += CHSV(160, 255, 255); // purple
+  leds[pos] += CHSV(172, 255, 255); // purple
 }
 
-void confetti() {
-  // random colored speckles that blink in and fade smoothly
-  fadeToBlackBy( leds, NUM_LEDS, 10);
-  int pos = random16(NUM_LEDS);
-  leds[pos] += CHSV( gHue + random8(64), 200, 255);
-}
-
-void juggle() {
-  // eight colored dots, weaving in and out of sync with each other
-  fadeToBlackBy( leds, NUM_LEDS, 20);
-  byte dothue = 0;
-  for ( int i = 0; i < 8; i++) {
-    leds[beatsin16( i + 7, 0, NUM_LEDS - 1 )] |= CHSV(dothue, 200, 255);
-    dothue += 32;
+// alert handling logic: capture alert, set up timer start state for each
+int TransitionAlertMode(int previousAlertMode)
+{
+  int alert = myNode.alertReceived();
+  switch (alert)
+  {
+    case AlertNode::EARTHQUAKE:
+      earthquakeSetup();
+      break;
+    case AlertNode::FLOOD:
+      floodSetup();
+      break;
+    case AlertNode::OCEAN_ACIDIFICATION:
+      oceanAcidificationSetup();
+      break;
+    case AlertNode::JELLY_WARNING:
+      jellyWarningSetup();
+      break;
+    case AlertNode::NO_ALERT:
+      // nothing changed
+      return previousAlertMode;
   }
+  return alert;
 }
 
-//TODO: detectAlert(), colorJellyfish(), writeLCD(), sendAlert()
+void earthquakeSetup()
+{
+  earthquakeOnRemainingTime = 3000; // set current alert to run for 3 seconds
+  floodOnRemainingTime = 0;
+  oceanAcidificationOnRemainingTime = 0;
+  jellyWarningOnRemainingTime = 0;
+  earthquakeOn = false; // start earthquake in off state
+}
 
-//void colorJellyfish() {
-//  // takes a color
-//  // map to a definition
-//  // rgb value
-//  // red / orange
-//  // purple / blue
-//  // bright chartruse/green
-//}
+void floodSetup()
+{
+  earthquakeOnRemainingTime = 0;
+  floodOnRemainingTime = 3000;
+  oceanAcidificationOnRemainingTime = 0;
+  jellyWarningOnRemainingTime = 0;
+  floodOn = false;
+}
+
+void oceanAcidificationSetup()
+{
+  earthquakeOnRemainingTime = 0;
+  floodOnRemainingTime = 0;
+  oceanAcidificationOnRemainingTime = 5000; // I set this longer so that I can coordinate with a wordy LCD printout for readability
+  jellyWarningOnRemainingTime = 0;
+  oceanAcidificationOn = false;
+}
+
+void jellyWarningSetup()
+{
+  earthquakeOnRemainingTime = 0;
+  floodOnRemainingTime = 0;
+  oceanAcidificationOnRemainingTime = 0;
+  jellyWarningOnRemainingTime = 3000;
+  jellyWarningOn = false;
+}
+
+// functions to handle handle alert state and LED behaviors
+int earthquakeRender()
+{
+  if (!earthquakeOn) {
+    earthquakeOn = true;
+  }
+
+  fill_solid(leds, NUM_LEDS, CRGB::YellowGreen); // set all to the chosen color
+  FastLED.show(); // write setting to LEDs
+  earthquakeOnRemainingTime -= loopDelta; // count down
+
+  if (earthquakeOnRemainingTime <= 0) {
+    earthquakeOn = false;
+    return AlertNode::NO_ALERT; // when timer runs out, return default state to main loop
+  }
+
+  return AlertNode::EARTHQUAKE;
+}
+
+int floodRender()
+{
+  if (!floodOn) {
+    floodOn = true;
+  }
+
+  fill_solid(leds, NUM_LEDS, CRGB::Blue); // Set all to the chosen color
+  FastLED.show();
+  floodOnRemainingTime -= loopDelta;
+  Serial.println(floodOnRemainingTime);
+
+  if (floodOnRemainingTime <= 0) {
+    floodOn = false;
+    return AlertNode::NO_ALERT;
+  }
+  return AlertNode::FLOOD;
+}
+
+int oceanAcidificationRender()
+{
+  if (!oceanAcidificationOn) {
+    oceanAcidificationOn = true;
+  }
+
+  fill_solid(leds, NUM_LEDS, CRGB::Maroon); // Set all to the chosen color
+  FastLED.show();
+  oceanAcidificationOnRemainingTime -= loopDelta;
+  Serial.println(oceanAcidificationOnRemainingTime);
+
+  if (oceanAcidificationOnRemainingTime <= 0) {
+    oceanAcidificationOn = false;
+    return AlertNode::NO_ALERT;
+  }
+  return AlertNode::OCEAN_ACIDIFICATION;
+}
+
+int jellyWarningRender()
+{
+  if (!jellyWarningOn) {
+    jellyWarningOn = true;
+  }
+
+  fill_solid(leds, NUM_LEDS, CRGB::Chartreuse); // Set all to the chosen color
+  FastLED.show();
+  jellyWarningOnRemainingTime -= loopDelta;
+
+  if (jellyWarningOnRemainingTime <= 0) {
+    jellyWarningOn = false;
+    return AlertNode::NO_ALERT;
+  }
+  return AlertNode::JELLY_WARNING;
+}
 
 //TO DO: convert this to flight time sensor input when part comes in
 void detectPredator() {
@@ -197,10 +299,9 @@ void senseLight() {
   //Serial.println(photoSensorValue);
 }
 
-// TO DO: update this to set a default awake color transition (e.g. bright green, then fade to aqua)
 void wakeJellyfish() {
-  FastLED.showColor(CRGB::Aqua); // background color
-  sinelon();
+  //FastLED.showColor(CRGB::Aqua); // background color
+  sinelon(); // this is the current chosen pattern
 }
 
 // turns off RGB
@@ -225,6 +326,11 @@ void swayJellyfish() {
   }
 }
 
+// send a special warning to other jellyfish on the node
+void warnOtherJellyfish() {
+  myNode.sendAlert(AlertNode::JELLY_WARNING);
+}
+
 void logAlert (String myName, int alert) {
   //TODO: revisit this, most of it is from alarm
   Serial.print("ALERT ");
@@ -240,4 +346,5 @@ void logAlert (String myName, int alert) {
   //  lcd.setCursor(0, 1); // set position to write next line
   //  lcd.print(myNode.alertName(alert) + " DETECTED");
 }
+
 
