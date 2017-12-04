@@ -39,6 +39,7 @@
 //const int debugPin = LED_BUILTIN; // set built in LED for debugging - commented b/c I'm currently using pin 13 in my build
 const int hallSensorPin = 7; // magnet sensor is attached here
 const int photoSensorPin = A0; // connect sensor to analog pin
+const int tempSensorPin = A1; // connect sensor to analog pin
 // settings for AlertLib
 const String myNodeName = "Jellyfish"; // name node for use with AlertNodeLib
 const boolean SENDING = true;
@@ -49,7 +50,7 @@ const int DATA_PIN = 5; // TODO: update for multiple strips
 const int CLK_PIN = 13; // TODO: update for multiple strips
 #define LED_TYPE APA102
 #define COLOR_ORDER BGR
-#define NUM_LEDS 100
+#define NUM_LEDS 250
 const int BRIGHTNESS = 96;
 const int FRAMES_PER_SECOND = 120;
 CRGB leds[NUM_LEDS];
@@ -61,6 +62,9 @@ AlertNode myNode; // connect to XBee; pin 2 TX and pin 3 for RX, 9600 baud
 int position; // servo position
 int predatorDetected; // state of predators
 int photoSensorValue; // amount of light
+float voltageValueForTemp; // voltage reading from temperature sensor
+float tempC; // temperature in celsius
+float tempF; // temperature in fahrenheit
 
 // alert timers & states
 unsigned long currentTime; // set in main loop
@@ -104,6 +108,8 @@ void loop() {
   loopDelta = currentTime - lastLoopStartTime;
   lastLoopStartTime = currentTime;
 
+  senseTemperature();
+
   //TO DO: REINTEGRATE THIS WITH NEW STRUCTURE
   // 1. JELLYFISH CREATES LIGHT WHEN IT'S DARK
   //        senseLight();
@@ -113,8 +119,6 @@ void loop() {
   //        else if (photoSensorValue > 200) {
   //          sleepJellyfish(); //if it's bright, turn off LEDs
   //        }
-
-
 
   // 2. JELLYFISH RESPONDS TO ALERTS
   currentAlert = TransitionAlertMode(currentAlert); // TransitionAlertMode sets states for each alert, returns current alert mode
@@ -154,6 +158,14 @@ void detectPredator() {
 //TO DO: convert this to new fancy light sensor when part comes in
 void senseLight() {
   photoSensorValue = analogRead(photoSensorPin); // read photo sensor input
+  //  Serial.println(photoSensorValue);
+}
+
+void senseTemperature() {
+  voltageValueForTemp = (analogRead(tempSensorPin) * 0.004882814); // read photo sensor input
+  tempC = (voltageValueForTemp - 0.5) * 100.0;
+  tempF = tempC * (9.0 / 5.0) + 32.0;
+  Serial.println(tempF);
 }
 
 // FastLED  pattern function - from FastLED demo reel
