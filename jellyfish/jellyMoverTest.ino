@@ -63,14 +63,14 @@ int predatorDetected; // state of predators
 int photoSensorValue; // amount of light
 
 // alert timers & states
+unsigned long currentTime; // set in main loop
 unsigned long lastLoopStartTime = millis();
-unsigned long currentTime;
 long loopDelta;
 long earthquakeOnRemainingTime; // counter for alert
 long floodOnRemainingTime;
 long oceanAcidificationOnRemainingTime;
 long jellyWarningOnRemainingTime;
-bool earthquakeOn;
+bool earthquakeOn; // state of alert
 bool floodOn;
 bool oceanAcidificationOn;
 bool jellyWarningOn;
@@ -106,19 +106,20 @@ void loop() {
 
   //TO DO: REINTEGRATE THIS WITH NEW STRUCTURE
   // 1. JELLYFISH CREATES LIGHT WHEN IT'S DARK
-  //      senseLight();
-  //      if (photoSensorValue > 200) {
-  //        wakeJellyfish();
-  //      }
-  //      else if (photoSensorValue > 200) {
-  //        sleepJellyfish(); //if it's bright, turn off LEDs
-  //      }
+  //        senseLight();
+  //        if (photoSensorValue < 200) {
+  //          wakeJellyfish();
+  //        }
+  //        else if (photoSensorValue > 200) {
+  //          sleepJellyfish(); //if it's bright, turn off LEDs
+  //        }
+
+
 
   // 2. JELLYFISH RESPONDS TO ALERTS
   currentAlert = TransitionAlertMode(currentAlert); // TransitionAlertMode sets states for each alert, returns current alert mode
   // Transition between alerts,
-  switch (currentAlert)
-  {
+  switch (currentAlert) {
     case AlertNode::EARTHQUAKE:
       currentAlert = earthquakeRender();
       break;
@@ -132,19 +133,30 @@ void loop() {
       currentAlert = jellyWarningRender();
       break;
     default: // jellyfish behavior when no alert is present
-      wakeJellyfish();
+      wakeJellyfish(); // checks light level and wakes up
       break;
   }
 
   // read magnet sensor input (current prototype for predator nearby--may switch out with time of flight sensor)
   detectPredator();
   if (predatorDetected) {
-    warnOtherJellyfish();
+    warnOtherJellyfish(); // tell jelly friends
   }
 }
 
-// FastLED  pattern function
+//TO DO: convert this to flight time sensor input when part comes in
+void detectPredator() {
+  int hallEffectSensorValue = digitalRead(hallSensorPin);
+  // the sensor turns voltage off (returns 0) when a magnet is present
+  predatorDetected = (hallEffectSensorValue == 0);
+}
 
+//TO DO: convert this to new fancy light sensor when part comes in
+void senseLight() {
+  photoSensorValue = analogRead(photoSensorPin); // read photo sensor input
+}
+
+// FastLED  pattern function - from FastLED demo reel
 void sinelon() {
   // a colored dot sweeping back and forth, with fading trails
   fadeToBlackBy(leds, NUM_LEDS, 20);
@@ -152,12 +164,43 @@ void sinelon() {
   leds[pos] += CHSV(172, 255, 255); // purple
 }
 
+void wakeJellyfish() {
+  senseLight();
+  if (photoSensorValue < 200) {
+    sinelon();// this is the current chosen default jelly pattern
+  }
+  else if (photoSensorValue > 200) {
+    sleepJellyfish(); //if it's bright, turn off LEDs
+  }
+}
+
+// turns off RGB
+void sleepJellyfish() {
+  FastLED.clear();
+}
+
+// jellyfish moves
+void swayJellyfish() {
+  // TODO: jiggle the servo with the jellyfish attached
+  // sweep the servo with the jellyfish attached
+  for (position = 0; position <= 180; position += 1) { // goes from 0 degrees to 180 degrees
+    // in steps of 1 degree
+    jellyMover.write(position);              // send servo to position
+    Serial.println(position);
+    // delay(15);
+  }
+  for (position = 180; position >= 0; position -= 1) { // goes from 180 degrees to 0 degrees
+    jellyMover.write(position);              // send servo to position
+    Serial.println(position);
+    // delay(15);
+  }
+}
+
 // alert handling logic: capture alert, set up timer start state for each
 int TransitionAlertMode(int previousAlertMode)
 {
   int alert = myNode.alertReceived();
-  switch (alert)
-  {
+  switch (alert) {
     case AlertNode::EARTHQUAKE:
       earthquakeSetup();
       break;
@@ -177,8 +220,7 @@ int TransitionAlertMode(int previousAlertMode)
   return alert;
 }
 
-void earthquakeSetup()
-{
+void earthquakeSetup() {
   earthquakeOnRemainingTime = 3000; // set current alert to run for 3 seconds
   floodOnRemainingTime = 0;
   oceanAcidificationOnRemainingTime = 0;
@@ -186,8 +228,7 @@ void earthquakeSetup()
   earthquakeOn = false; // start earthquake in off state
 }
 
-void floodSetup()
-{
+void floodSetup() {
   earthquakeOnRemainingTime = 0;
   floodOnRemainingTime = 3000;
   oceanAcidificationOnRemainingTime = 0;
@@ -195,8 +236,7 @@ void floodSetup()
   floodOn = false;
 }
 
-void oceanAcidificationSetup()
-{
+void oceanAcidificationSetup() {
   earthquakeOnRemainingTime = 0;
   floodOnRemainingTime = 0;
   oceanAcidificationOnRemainingTime = 5000; // I set this longer so that I can coordinate with a wordy LCD printout for readability
@@ -204,8 +244,7 @@ void oceanAcidificationSetup()
   oceanAcidificationOn = false;
 }
 
-void jellyWarningSetup()
-{
+void jellyWarningSetup() {
   earthquakeOnRemainingTime = 0;
   floodOnRemainingTime = 0;
   oceanAcidificationOnRemainingTime = 0;
@@ -214,35 +253,29 @@ void jellyWarningSetup()
 }
 
 // functions to handle handle alert state and LED behaviors
-int earthquakeRender()
-{
+// TO DO: FIX FLICKER WITH MOVEMENT ADDED
+int earthquakeRender() {
   if (!earthquakeOn) {
     earthquakeOn = true;
   }
-
-  fill_solid(leds, NUM_LEDS, CRGB::YellowGreen); // set all to the chosen color
+  fill_solid(leds, NUM_LEDS, CRGB::Yellow); // set all to the chosen color
   FastLED.show(); // write setting to LEDs
+  swayJellyfish(); // move jelly
   earthquakeOnRemainingTime -= loopDelta; // count down
-
   if (earthquakeOnRemainingTime <= 0) {
     earthquakeOn = false;
     return AlertNode::NO_ALERT; // when timer runs out, return default state to main loop
   }
-
   return AlertNode::EARTHQUAKE;
 }
 
-int floodRender()
-{
+int floodRender() {
   if (!floodOn) {
     floodOn = true;
   }
-
-  fill_solid(leds, NUM_LEDS, CRGB::Blue); // Set all to the chosen color
+  fill_solid(leds, NUM_LEDS, CRGB::DarkBlue); // Set all to the chosen color
   FastLED.show();
   floodOnRemainingTime -= loopDelta;
-  Serial.println(floodOnRemainingTime);
-
   if (floodOnRemainingTime <= 0) {
     floodOn = false;
     return AlertNode::NO_ALERT;
@@ -250,17 +283,14 @@ int floodRender()
   return AlertNode::FLOOD;
 }
 
-int oceanAcidificationRender()
-{
+int oceanAcidificationRender() {
   if (!oceanAcidificationOn) {
     oceanAcidificationOn = true;
   }
-
   fill_solid(leds, NUM_LEDS, CRGB::Maroon); // Set all to the chosen color
   FastLED.show();
   oceanAcidificationOnRemainingTime -= loopDelta;
   Serial.println(oceanAcidificationOnRemainingTime);
-
   if (oceanAcidificationOnRemainingTime <= 0) {
     oceanAcidificationOn = false;
     return AlertNode::NO_ALERT;
@@ -268,16 +298,13 @@ int oceanAcidificationRender()
   return AlertNode::OCEAN_ACIDIFICATION;
 }
 
-int jellyWarningRender()
-{
+int jellyWarningRender() {
   if (!jellyWarningOn) {
     jellyWarningOn = true;
   }
-
   fill_solid(leds, NUM_LEDS, CRGB::Chartreuse); // Set all to the chosen color
   FastLED.show();
   jellyWarningOnRemainingTime -= loopDelta;
-
   if (jellyWarningOnRemainingTime <= 0) {
     jellyWarningOn = false;
     return AlertNode::NO_ALERT;
@@ -285,50 +312,12 @@ int jellyWarningRender()
   return AlertNode::JELLY_WARNING;
 }
 
-//TO DO: convert this to flight time sensor input when part comes in
-void detectPredator() {
-  int hallEffectSensorValue = digitalRead(hallSensorPin);
-  // the sensor turns voltage off (returns 0) when a magnet is present
-  predatorDetected = (hallEffectSensorValue == 0);
-  // Serial.println(predatorDetected);
-}
-
-//TO DO: convert this to new fancy light sensor when part comes in
-void senseLight() {
-  photoSensorValue = analogRead(photoSensorPin); // read photo sensor input
-  //Serial.println(photoSensorValue);
-}
-
-void wakeJellyfish() {
-  //FastLED.showColor(CRGB::Aqua); // background color
-  sinelon(); // this is the current chosen pattern
-}
-
-// turns off RGB
-void sleepJellyfish() {
-  FastLED.clear();
-}
-
-// jellyfish moves
-void swayJellyfish() {
-  // TODO: jiggle the servo with the jellyfish attached
-  // sweep the servo with the jellyfish attached
-  for (position = 0; position <= 180; position += 1) { // goes from 0 degrees to 180 degrees
-    // in steps of 1 degree
-    jellyMover.write(position);              // send servo to position
-    Serial.println(position);
-    delay(15);
-  }
-  for (position = 180; position >= 0; position -= 1) { // goes from 180 degrees to 0 degrees
-    jellyMover.write(position);              // send servo to position
-    Serial.println(position);
-    delay(15);
-  }
-}
-
 // send a special warning to other jellyfish on the node
 void warnOtherJellyfish() {
   myNode.sendAlert(AlertNode::JELLY_WARNING);
+  // flash white
+  fill_solid(leds, NUM_LEDS, CRGB::White); // set all to the chosen color
+  FastLED.show(); // write setting to LEDs
 }
 
 void logAlert (String myName, int alert) {
