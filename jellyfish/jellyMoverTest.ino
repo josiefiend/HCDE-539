@@ -50,10 +50,14 @@ const int DATA_PIN = 5; // TODO: update for multiple strips
 const int CLK_PIN = 13; // TODO: update for multiple strips
 #define LED_TYPE APA102
 #define COLOR_ORDER BGR
-#define NUM_LEDS 250
+#define NUM_LEDS 144
 const int BRIGHTNESS = 96;
 const int FRAMES_PER_SECOND = 120;
 CRGB leds[NUM_LEDS];
+// LED body pins
+const int redPin = 9;
+const int greenPin = 10;
+const int bluePin = 11;
 
 Servo jellyMover; // servo to control jellyfish
 Adafruit_LiquidCrystal lcd(0); // initialize LCD
@@ -79,6 +83,8 @@ bool floodOn;
 bool oceanAcidificationOn;
 bool jellyWarningOn;
 int currentAlert = AlertNode::NO_ALERT;
+String messageLn1;
+String messageLn2;
 
 void setup() {
   delay(3000); // 3 second recommended delay for recovery for FastLED
@@ -163,7 +169,7 @@ void senseLight() {
 
 void senseTemperature() {
   voltageValueForTemp = (analogRead(tempSensorPin) * 0.004882814); // read photo sensor input
-  tempC = (voltageValueForTemp - 0.5) * 100.0;
+  tempC = (voltageValueForTemp - 500) / 10;
   tempF = tempC * (9.0 / 5.0) + 32.0;
   Serial.println(tempF);
 }
@@ -189,6 +195,7 @@ void wakeJellyfish() {
 // turns off RGB
 void sleepJellyfish() {
   FastLED.clear();
+  // lcd.clear();
 }
 
 // jellyfish moves
@@ -238,6 +245,7 @@ void earthquakeSetup() {
   oceanAcidificationOnRemainingTime = 0;
   jellyWarningOnRemainingTime = 0;
   earthquakeOn = false; // start earthquake in off state
+  messageLn2 = "slosh";
 }
 
 void floodSetup() {
@@ -246,6 +254,7 @@ void floodSetup() {
   oceanAcidificationOnRemainingTime = 0;
   jellyWarningOnRemainingTime = 0;
   floodOn = false;
+  messageLn2 = "the waters rise";
 }
 
 void oceanAcidificationSetup() {
@@ -262,6 +271,7 @@ void jellyWarningSetup() {
   oceanAcidificationOnRemainingTime = 0;
   jellyWarningOnRemainingTime = 3000;
   jellyWarningOn = false;
+  messageLn2 = "warning from colony";
 }
 
 // functions to handle handle alert state and LED behaviors
@@ -270,6 +280,7 @@ int earthquakeRender() {
   if (!earthquakeOn) {
     earthquakeOn = true;
   }
+  printAlert(currentAlert);
   fill_solid(leds, NUM_LEDS, CRGB::Yellow); // set all to the chosen color
   FastLED.show(); // write setting to LEDs
   swayJellyfish(); // move jelly
@@ -285,6 +296,7 @@ int floodRender() {
   if (!floodOn) {
     floodOn = true;
   }
+  printAlert(currentAlert);
   fill_solid(leds, NUM_LEDS, CRGB::DarkBlue); // Set all to the chosen color
   FastLED.show();
   floodOnRemainingTime -= loopDelta;
@@ -299,10 +311,10 @@ int oceanAcidificationRender() {
   if (!oceanAcidificationOn) {
     oceanAcidificationOn = true;
   }
+  printAlert(2005);
   fill_solid(leds, NUM_LEDS, CRGB::Maroon); // Set all to the chosen color
   FastLED.show();
   oceanAcidificationOnRemainingTime -= loopDelta;
-  Serial.println(oceanAcidificationOnRemainingTime);
   if (oceanAcidificationOnRemainingTime <= 0) {
     oceanAcidificationOn = false;
     return AlertNode::NO_ALERT;
@@ -332,20 +344,23 @@ void warnOtherJellyfish() {
   FastLED.show(); // write setting to LEDs
 }
 
-void logAlert (String myName, int alert) {
-  //TODO: revisit this, most of it is from alarm
-  Serial.print("ALERT ");
-  float sec = millis() / 1000.0;
-  Serial.println(sec);
-  Serial.print(myName);
-  Serial.print(" | alert = ");
-  Serial.print(alert);
-  Serial.print(": ");
-  Serial.println(myNode.alertName(alert));
-  //  lcd.begin(16, 2); // set number of columns and rows on LCD
-  //  lcd.print("Jellyfish "); // print mode to first line
-  //  lcd.setCursor(0, 1); // set position to write next line
-  //  lcd.print(myNode.alertName(alert) + " DETECTED");
+void printAlert (int currentAlert) {
+  int thisAlert = currentAlert;
+  lcd.begin(16, 2); // set number of columns and rows on LCD
+  if (thisAlert == 2005) {
+    messageLn1 = "CLIMATE CHANGE";
+    messageLn2 = "IS REAL";
+    lcd.setCursor(0, 0); // set position to write next line
+    lcd.print(messageLn1);
+    lcd.setCursor(0, 1); // set position to write next line
+    lcd.print(messageLn2);
+  }
+  else {
+    lcd.setCursor(0, 0);
+    lcd.print("Jellyfish "); // print mode to first line
+    lcd.setCursor(0, 1);
+    lcd.print(messageLn2);
+  }
 }
 
 
