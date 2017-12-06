@@ -50,8 +50,8 @@ const int DATA_PIN = 5; // TODO: update for multiple strips
 const int CLK_PIN = 13; // TODO: update for multiple strips
 #define LED_TYPE APA102
 #define COLOR_ORDER BGR
-#define NUM_LEDS 144
-const int BRIGHTNESS = 96;
+#define NUM_LEDS 150
+int BRIGHTNESS = 96;
 const int FRAMES_PER_SECOND = 120;
 CRGB leds[NUM_LEDS];
 // LED body pins
@@ -92,10 +92,10 @@ void setup() {
   myNode.begin(myNodeName); // start node
   Serial.print("\n\n*** Starting AlertNodeBasic demo: ");
   Serial.println(myNodeName);
-  //myNode.setDebug(true);
+  myNode.setDebug(false); // configurable debugging state
 
-  jellyMover.attach(4); // set jellyfish on pin 4
-  pinMode(hallSensorPin, INPUT);  // set sensor pin as input
+  jellyMover.attach(4); // set jellyfish servo on pin 4
+  pinMode(hallSensorPin, INPUT);  // set digital sensor pins as input
 
   // setup for FastLED
   FastLED.addLeds<LED_TYPE, DATA_PIN, CLK_PIN, COLOR_ORDER, DATA_RATE_MHZ(12)>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
@@ -106,7 +106,6 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
 
   FastLED.delay(1000 / FRAMES_PER_SECOND); // insert a delay for FastLED to keep the framerate modest
   // timer
@@ -114,19 +113,16 @@ void loop() {
   loopDelta = currentTime - lastLoopStartTime;
   lastLoopStartTime = currentTime;
 
-  senseTemperature();
-
-  //TO DO: REINTEGRATE THIS WITH NEW STRUCTURE
-  // 1. JELLYFISH CREATES LIGHT WHEN IT'S DARK
-  //        senseLight();
-  //        if (photoSensorValue < 200) {
-  //          wakeJellyfish();
-  //        }
-  //        else if (photoSensorValue > 200) {
-  //          sleepJellyfish(); //if it's bright, turn off LEDs
-  //        }
+  // check temperature; if it's too hot, the jellyfish will be lethargic and its lights will dim
+//  senseTemperature();
+//  if (tempF > 90) {
+//    BRIGHTNESS = 40;
+//    FastLED.setBrightness(BRIGHTNESS);
+//  }
 
   // 2. JELLYFISH RESPONDS TO ALERTS
+  ///int alertForMsg = myNode.alertReceived();
+
   currentAlert = TransitionAlertMode(currentAlert); // TransitionAlertMode sets states for each alert, returns current alert mode
   // Transition between alerts,
   switch (currentAlert) {
@@ -154,6 +150,7 @@ void loop() {
   }
 }
 
+
 //TO DO: convert this to flight time sensor input when part comes in
 void detectPredator() {
   int hallEffectSensorValue = digitalRead(hallSensorPin);
@@ -168,9 +165,9 @@ void senseLight() {
 }
 
 void senseTemperature() {
-  voltageValueForTemp = (analogRead(tempSensorPin) * 0.004882814); // read photo sensor input
-  tempC = (voltageValueForTemp - 500) / 10;
-  tempF = tempC * (9.0 / 5.0) + 32.0;
+  voltageValueForTemp = (analogRead(tempSensorPin) * 0.004882814); // read temperature sensor input
+  tempC = (voltageValueForTemp - 500) / 10; // this uses voltage, convert to a temperature (common formula)
+  tempF = tempC * (9.0 / 5.0) + 32.0; // convert celsius to fahrenheit
   Serial.println(tempF);
 }
 
@@ -186,6 +183,9 @@ void wakeJellyfish() {
   senseLight();
   if (photoSensorValue < 200) {
     sinelon();// this is the current chosen default jelly pattern
+    analogWrite(redPin, 0);
+    analogWrite(bluePin, 0);
+    analogWrite(greenPin, 0);
   }
   else if (photoSensorValue > 200) {
     sleepJellyfish(); //if it's bright, turn off LEDs
@@ -195,21 +195,23 @@ void wakeJellyfish() {
 // turns off RGB
 void sleepJellyfish() {
   FastLED.clear();
-  // lcd.clear();
+  analogWrite(redPin, 255);
+  analogWrite(bluePin, 255);
+  analogWrite(greenPin, 255);
+  lcd.clear();
 }
 
 // jellyfish moves
 void swayJellyfish() {
   // TODO: jiggle the servo with the jellyfish attached
   // sweep the servo with the jellyfish attached
-  for (position = 0; position <= 180; position += 1) { // goes from 0 degrees to 180 degrees
-    // in steps of 1 degree
-    jellyMover.write(position);              // send servo to position
+  for (position = 0; position <= 180; position += 1) { // goes from 0 degrees to 180 degrees in steps of 1 degree
+    jellyMover.write(180);              // send servo to position
     Serial.println(position);
     // delay(15);
   }
   for (position = 180; position >= 0; position -= 1) { // goes from 180 degrees to 0 degrees
-    jellyMover.write(position);              // send servo to position
+    jellyMover.write(0);              // send servo to position
     Serial.println(position);
     // delay(15);
   }
@@ -245,6 +247,7 @@ void earthquakeSetup() {
   oceanAcidificationOnRemainingTime = 0;
   jellyWarningOnRemainingTime = 0;
   earthquakeOn = false; // start earthquake in off state
+  messageLn1 = "shake shake!";
   messageLn2 = "slosh";
 }
 
@@ -254,7 +257,8 @@ void floodSetup() {
   oceanAcidificationOnRemainingTime = 0;
   jellyWarningOnRemainingTime = 0;
   floodOn = false;
-  messageLn2 = "the waters rise";
+  messageLn1 = "rising waters!";
+  messageLn2 = "space to swim";
 }
 
 void oceanAcidificationSetup() {
@@ -263,6 +267,8 @@ void oceanAcidificationSetup() {
   oceanAcidificationOnRemainingTime = 5000; // I set this longer so that I can coordinate with a wordy LCD printout for readability
   jellyWarningOnRemainingTime = 0;
   oceanAcidificationOn = false;
+  messageLn1 = "CLIMATE CHANGE";
+  messageLn2 = "IS REAL";
 }
 
 void jellyWarningSetup() {
@@ -271,7 +277,8 @@ void jellyWarningSetup() {
   oceanAcidificationOnRemainingTime = 0;
   jellyWarningOnRemainingTime = 3000;
   jellyWarningOn = false;
-  messageLn2 = "warning from colony";
+  messageLn1 = "predator nearing!";
+  messageLn2 = "thanks, jelly friend";
 }
 
 // functions to handle handle alert state and LED behaviors
@@ -279,14 +286,18 @@ void jellyWarningSetup() {
 int earthquakeRender() {
   if (!earthquakeOn) {
     earthquakeOn = true;
+    printAlert(currentAlert);
   }
-  printAlert(currentAlert);
+  swayJellyfish();
+  analogWrite(redPin, 255);
+  analogWrite(bluePin, 255);
+  analogWrite(greenPin, 0);
   fill_solid(leds, NUM_LEDS, CRGB::Yellow); // set all to the chosen color
   FastLED.show(); // write setting to LEDs
-  swayJellyfish(); // move jelly
   earthquakeOnRemainingTime -= loopDelta; // count down
   if (earthquakeOnRemainingTime <= 0) {
     earthquakeOn = false;
+    lcd.clear();
     return AlertNode::NO_ALERT; // when timer runs out, return default state to main loop
   }
   return AlertNode::EARTHQUAKE;
@@ -295,13 +306,17 @@ int earthquakeRender() {
 int floodRender() {
   if (!floodOn) {
     floodOn = true;
+    printAlert(currentAlert);
   }
-  printAlert(currentAlert);
   fill_solid(leds, NUM_LEDS, CRGB::DarkBlue); // Set all to the chosen color
   FastLED.show();
+  analogWrite(redPin, 255);
+  analogWrite(bluePin, 0);
+  analogWrite(greenPin, 255);
   floodOnRemainingTime -= loopDelta;
   if (floodOnRemainingTime <= 0) {
     floodOn = false;
+    lcd.clear();
     return AlertNode::NO_ALERT;
   }
   return AlertNode::FLOOD;
@@ -310,13 +325,17 @@ int floodRender() {
 int oceanAcidificationRender() {
   if (!oceanAcidificationOn) {
     oceanAcidificationOn = true;
+    printAlert(currentAlert);
   }
-  printAlert(2005);
+  analogWrite(redPin, 0);
+  analogWrite(bluePin, 255);
+  analogWrite(greenPin, 255);
   fill_solid(leds, NUM_LEDS, CRGB::Maroon); // Set all to the chosen color
   FastLED.show();
   oceanAcidificationOnRemainingTime -= loopDelta;
   if (oceanAcidificationOnRemainingTime <= 0) {
     oceanAcidificationOn = false;
+    lcd.clear();
     return AlertNode::NO_ALERT;
   }
   return AlertNode::OCEAN_ACIDIFICATION;
@@ -325,12 +344,17 @@ int oceanAcidificationRender() {
 int jellyWarningRender() {
   if (!jellyWarningOn) {
     jellyWarningOn = true;
+    printAlert(currentAlert);
   }
+  analogWrite(redPin, 172);
+  analogWrite(bluePin, 172);
+  analogWrite(greenPin, 255);
   fill_solid(leds, NUM_LEDS, CRGB::Chartreuse); // Set all to the chosen color
   FastLED.show();
   jellyWarningOnRemainingTime -= loopDelta;
   if (jellyWarningOnRemainingTime <= 0) {
     jellyWarningOn = false;
+    lcd.clear();
     return AlertNode::NO_ALERT;
   }
   return AlertNode::JELLY_WARNING;
@@ -347,20 +371,10 @@ void warnOtherJellyfish() {
 void printAlert (int currentAlert) {
   int thisAlert = currentAlert;
   lcd.begin(16, 2); // set number of columns and rows on LCD
-  if (thisAlert == 2005) {
-    messageLn1 = "CLIMATE CHANGE";
-    messageLn2 = "IS REAL";
-    lcd.setCursor(0, 0); // set position to write next line
-    lcd.print(messageLn1);
-    lcd.setCursor(0, 1); // set position to write next line
-    lcd.print(messageLn2);
-  }
-  else {
-    lcd.setCursor(0, 0);
-    lcd.print("Jellyfish "); // print mode to first line
-    lcd.setCursor(0, 1);
-    lcd.print(messageLn2);
-  }
+  lcd.setCursor(0, 0); // set position to write next line
+  lcd.print(messageLn1);
+  lcd.setCursor(0, 1); // set position to write next line
+  lcd.print(messageLn2);
 }
 
 
