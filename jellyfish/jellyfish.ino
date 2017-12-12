@@ -45,8 +45,8 @@ const boolean SENDING = true;
 const boolean RECEIVING = true;
 boolean myDebugging = false; // change this based on your preference
 // settings for FastLED with APA102 DotStar strip
-const int DATA_PIN = 5; // TODO: update for multiple strips
-const int CLK_PIN = 13; // TODO: update for multiple strips
+const int DATA_PIN = 5;
+const int CLK_PIN = 13; 
 #define LED_TYPE APA102
 #define COLOR_ORDER BGR
 #define NUM_LEDS 144
@@ -77,8 +77,8 @@ bool earthquakeOn; // state of alert
 bool floodOn;
 bool oceanAcidificationOn;
 bool jellyWarningOn;
-int currentAlert = AlertNode::NO_ALERT;
-String messageLn1;
+int currentAlert = AlertNode::NO_ALERT; // default alert
+String messageLn1; // for printing custom messages to LCD
 String messageLn2;
 bool needsLight;
 bool tooHot;
@@ -92,7 +92,8 @@ void setup() {
   myNode.setDebug(false); // configurable debugging state
 
   jellyMover.attach(4); // set jellyfish servo on pin 4
-  pinMode(hallSensorPin, INPUT);  // set digital sensor pins as input
+  pinMode(hallSensorPin, INPUT);  // set sensor pins as input
+  pinMode(tempSensorPin, INPUT); // analog; pinMode not required, but good practice
 
   // setup for FastLED
   FastLED.addLeds<LED_TYPE, DATA_PIN, CLK_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
@@ -113,12 +114,12 @@ void loop() {
   // check temperature; if it's too hot, the jellyfish will be lethargic and its lights will dim
   senseTemperature();
   if (tooHot) {
-    for (int i = 0; i < NUM_LEDS; i++) {
-      leds[i].fadeLightBy(128); // uses FastLED's dim
-    }
+    FastLED.setBrightness(BRIGHTNESS / 5); // human perception of brightness isn't linear so I went with 20%
   }
+  else FastLED.setBrightness(BRIGHTNESS);
 
-  senseLight(); // check the light level, which will be used for logic in default jellyfish alert state wakeJellyfish();
+  // check the light level, which will be used for logic in default jellyfish alert state wakeJellyfish();
+  senseLight();
 
   // read magnet sensor input
   detectPredator();
@@ -126,6 +127,7 @@ void loop() {
     warnOtherJellyfish(); // tell jelly friends
   }
 
+  // handle alerts
   currentAlert = TransitionAlertMode(currentAlert); // TransitionAlertMode sets states for each alert, returns current alert mode
   // Transition between alerts
   switch (currentAlert) {
@@ -159,16 +161,22 @@ void senseLight() {
   photoSensorValue = analogRead(photoSensorPin); // read photo sensor input
   if (photoSensorValue < 200) {
     needsLight = true;
-    Serial.println(needsLight);
+    //Serial.println(needsLight + " NEEDS LIGHT");
   }
   else needsLight = false;
 }
 
 void senseTemperature() {
-  voltageValueForTemp = (analogRead(tempSensorPin) * 0.004882814); // read temperature sensor input
-  tempC = (voltageValueForTemp - 500) / 10; // this uses voltage, convert to a temperature (common formula)
-  tempF = tempC * (9.0 / 5.0) + 32.0; // convert celsius to fahrenheit
-  //Serial.println(tempF);
+  voltageValueForTemp = analogRead(tempSensorPin); // read temperature sensor input & convert for voltage
+  float voltage = voltageValueForTemp * 5.0;
+  voltage /= 1024.0;
+  tempC = (voltage - 0.5) * 100; // this uses voltage, convert to a temperature (common formula)
+  tempF = (tempC * 9.0 / 5.0) + 32.0; // convert celsius to fahrenheit
+  if (tempF > 120) {
+    tooHot = true;
+    //Serial.println(tooHot + " TOO HOT")
+  }
+  else tooHot = false;
 }
 
 // FastLED  pattern function - from FastLED demo reel
